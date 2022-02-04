@@ -13,12 +13,16 @@ using Xunit.Abstractions;
 namespace MassTransit.CloudEvents.IntegrationTests;
 
 [Collection("user/loggedIn")]
-public class FromDapr
+public class FromDapr : IClassFixture<RabbitMqContainer>
 {
     private readonly ITestOutputHelper _output;
+    private readonly RabbitMqContainer _container;
 
-    public FromDapr(ITestOutputHelper output) => 
+    public FromDapr(ITestOutputHelper output, RabbitMqContainer container)
+    {
         _output = output;
+        _container = container;
+    }
 
     [Fact]
     public async Task Do()
@@ -35,6 +39,7 @@ public class FromDapr
         var bus = Bus.Factory
             .CreateUsingRabbitMq(cfg =>
             {
+                cfg.Host(_container.ConnectionString);
                 cfg.UseCloudEvents()
                     .WithContentType(new ContentType("text/plain"));
                     
