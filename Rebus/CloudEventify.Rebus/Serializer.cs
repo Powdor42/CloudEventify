@@ -12,7 +12,7 @@ internal class Serializer : ISerializer
         var cloudEvent = new CloudEvent(CloudEventsSpecVersion.Default)
         {
             Data = message.Body,
-            Source =new Uri("cloudeventify:rebus"),
+            Source = new Uri("cloudeventify:rebus"),
             Id = message.Headers[Headers.MessageId],
             Type = message.Headers[Headers.Type],
             Time = DateTimeOffset.Parse(message.Headers[Headers.SentTime])

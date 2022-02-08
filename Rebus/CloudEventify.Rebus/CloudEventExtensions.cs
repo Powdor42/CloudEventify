@@ -5,7 +5,7 @@ using CloudNative.CloudEvents.SystemTextJson;
 
 namespace CloudEventify.Rebus;
 
-internal static class CloudEventExtensions
+public static class CloudEventExtensions
 {
     public static object ToObject(this CloudEvent element, Type type, JsonSerializerOptions options = null)
     {
