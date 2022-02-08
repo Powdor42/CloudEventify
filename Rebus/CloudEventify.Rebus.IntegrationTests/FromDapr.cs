@@ -1,18 +1,9 @@
 using System;
-using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using Bogus;
-using CloudNative.CloudEvents;
-using Dapr.Client;
-using Dapr.Client.Autogen.Grpc.v1;
-using DaprApp;
 using FluentAssertions.Extensions;
-using Google.Protobuf;
-using Grpc.Net.Client;
 using Hypothesist;
 using Hypothesist.Rebus;
-using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using Rebus.Activation;
@@ -20,6 +11,7 @@ using Rebus.Config;
 using Wrapr;
 using Xunit;
 using Xunit.Abstractions;
+using DaprClient = CloudEventity.Dapr.DaprClient;
 
 namespace CloudEventify.Rebus.IntegrationTests;
 

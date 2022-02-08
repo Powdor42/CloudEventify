@@ -1,13 +1,12 @@
-using System;
 using System.Text.Json;
-using System.Threading.Tasks;
 using CloudNative.CloudEvents;
 using CloudNative.CloudEvents.SystemTextJson;
 using Dapr.Client.Autogen.Grpc.v1;
 using Google.Protobuf;
 using Grpc.Net.Client;
+using DaprGrpcClient = Dapr.Client.Autogen.Grpc.v1.Dapr.DaprClient;
 
-namespace CloudEventify.Rebus.IntegrationTests;
+namespace CloudEventity.Dapr;
 
 public class DaprClient
 {
@@ -35,7 +34,7 @@ public class DaprClient
         };
         
         using var channel = GrpcChannel.ForAddress(_address, _options);
-        var client = new Dapr.Client.Autogen.Grpc.v1.Dapr.DaprClient(channel);
+        var client = new DaprGrpcClient(channel);
         await client.PublishEventAsync(new PublishEventRequest
         {
             PubsubName = pubsub,
