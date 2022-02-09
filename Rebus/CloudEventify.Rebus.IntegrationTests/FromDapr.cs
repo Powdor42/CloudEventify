@@ -4,11 +4,12 @@ using Bogus;
 using FluentAssertions.Extensions;
 using Hypothesist;
 using Hypothesist.Rebus;
-using Microsoft.Extensions.Logging;
+using Man.Dapr.Sidekick;
+using Man.Dapr.Sidekick.Extensions.Logging;
+using Man.Dapr.Sidekick.Threading;
 using RabbitMQ.Client;
 using Rebus.Activation;
 using Rebus.Config;
-using Wrapr;
 using Xunit;
 using Xunit.Abstractions;
 using DaprClient = CloudEventity.Dapr.DaprClient;
@@ -39,20 +40,19 @@ public class FromDapr : IClassFixture<RabbitMqContainer>
             .For<UserLoggedIn>()
             .Any(x => x == message);
 
-        using var logger = _output.BuildLogger();
         var activator = new BuiltinHandlerActivator()
             .Register(hypothesis.AsHandler);
         var subscriber = Configure.With(activator)
             .Transport(t => t.UseRabbitMq(_container.ConnectionString, queue))
             .Serialization(s => s.UseCloudEvents())
-            .Logging(l => l.MicrosoftExtensionsLogging(logger))
+            .Logging(l => l.MicrosoftExtensionsLogging(_output.ToLoggerFactory()))
             .Start();
         await subscriber.Subscribe<UserLoggedIn>();
 
         RouteToRebus(_container.ConnectionString, topic, queue);
         
         // Act
-        await Publish(topic, message, logger);
+        await Publish(topic, message, _output);
 
         // Assert
         await hypothesis.Validate(5.Seconds());
@@ -71,12 +71,23 @@ public class FromDapr : IClassFixture<RabbitMqContainer>
         model.QueueBind(queue, topic, "");
     }
 
-    private static async Task Publish(string topic, UserLoggedIn message, ILogger logger)
+    private static async Task Publish(string topic, UserLoggedIn message, ITestOutputHelper logger)
     {
-        await using var sidecar = new Sidecar("from-dapr-to-rabbitmq", logger);
-        await sidecar.Start(with => with
-            .ComponentsPath("components")
-            .DaprGrpcPort(3001));
+        var sidekick = new DaprSidekickBuilder().WithLoggerFactory(new DaprLoggerFactory(logger.ToLoggerFactory())).Build();
+        sidekick.Sidecar.Start(() => new DaprOptions
+        {
+            Sidecar = new DaprSidecarOptions
+            {
+                ComponentsDirectory = "components",
+                DaprGrpcPort = 3001
+            }
+        }, DaprCancellationToken.None);
+        await Task.Delay(1.Seconds());
+
+        // await using var sidecar = new Sidecar("from-dapr-to-rabbitmq", logger);
+        // await sidecar.Start(with => with
+        //     .ComponentsPath("components")
+        //     .DaprGrpcPort(3001));
 
         // using var client = new DaprClientBuilder()
         //     .UseGrpcEndpoint("http://localhost:3001")

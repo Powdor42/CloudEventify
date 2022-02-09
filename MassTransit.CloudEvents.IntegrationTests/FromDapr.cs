@@ -1,12 +1,14 @@
+using System;
 using System.Net.Mime;
 using System.Threading.Tasks;
 using Bogus;
 using Dapr.Client;
 using FluentAssertions.Extensions;
 using Hypothesist;
+using Man.Dapr.Sidekick;
+using Man.Dapr.Sidekick.Extensions.Logging;
+using Man.Dapr.Sidekick.Threading;
 using MassTransit.Context;
-using Microsoft.Extensions.Logging;
-using Wrapr;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -33,8 +35,7 @@ public class FromDapr : IClassFixture<RabbitMqContainer>
             .For<UserLoggedIn>()
             .Any(x => x == message);
 
-        using var logger = _output.BuildLogger();
-        LogContext.ConfigureCurrentLogContext(logger);
+        LogContext.ConfigureCurrentLogContext(_output.ToLoggerFactory());
             
         var bus = Bus.Factory
             .CreateUsingRabbitMq(cfg =>
@@ -55,7 +56,7 @@ public class FromDapr : IClassFixture<RabbitMqContainer>
         await bus.StartAsync();
             
         // Act
-        await Publish(message, logger);
+        await Publish(message, _output);
 
         // Assert
         await hypothesis.Validate(15.Seconds());
@@ -70,12 +71,12 @@ public class FromDapr : IClassFixture<RabbitMqContainer>
             .For<UserLoggedIn>()
             .Any(x => x == message);
 
-        using var logger = _output.BuildLogger();
-        LogContext.ConfigureCurrentLogContext(logger);
+        LogContext.ConfigureCurrentLogContext(_output.ToLoggerFactory());
             
         var bus = Bus.Factory
             .CreateUsingRabbitMq(cfg =>
             {
+                cfg.Host(new Uri(_container.ConnectionString));
                 cfg.ReceiveEndpoint("user:loggedIn:test:local-config", x =>
                 {
                     x.UseCloudEvents()
@@ -87,19 +88,25 @@ public class FromDapr : IClassFixture<RabbitMqContainer>
         await bus.StartAsync();
 
         // Act
-        await Publish(message, logger);
+        await Publish(message, _output);
 
         // Assert
         await hypothesis.Validate(10.Seconds());
     }
 
 
-    private static async Task Publish(UserLoggedIn message, ILogger logger)
+    private static async Task Publish(UserLoggedIn message, ITestOutputHelper logger)
     {
-        await using var sidecar = new Sidecar("from-dapr", logger);
-        await sidecar.Start(with => with
-            .ComponentsPath("components")
-            .DaprGrpcPort(3001));
+        var sidekick = new DaprSidekickBuilder().WithLoggerFactory(new DaprLoggerFactory(logger.ToLoggerFactory())).Build();
+        sidekick.Sidecar.Start(() => new DaprOptions
+        {
+            Sidecar = new DaprSidecarOptions
+            {
+                ComponentsDirectory = "components",
+                DaprGrpcPort = 3001
+            }
+        }, DaprCancellationToken.None);
+        await Task.Delay(1.Seconds());
 
         using var client = new DaprClientBuilder()
             .UseGrpcEndpoint("http://localhost:3001")

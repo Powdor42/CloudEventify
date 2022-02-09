@@ -5,11 +5,11 @@ using DaprApp;
 using DaprApp.Controllers;
 using FluentAssertions.Extensions;
 using Hypothesist;
+using Man.Dapr.Sidekick;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using RabbitMQ.Client;
 using Rebus.Config;
-using Wrapr;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -36,58 +36,56 @@ public class ToDapr : IClassFixture<RabbitMqContainer>
             .For<int>()
             .Any(x => x == message.UserId);
 
-        using var logger = _output.BuildLogger();
-        await using var host = await Host(hypothesis.ToHandler());
-        await using var sidecar = await Sidecar(logger);
+        await using var host = await Host(hypothesis.ToHandler(), 6000);
+        await Task.Delay(1.Seconds());
             
         // Act
-        await Publish(message, logger);
+        await Publish(message, _output);
 
         // Assert
         await hypothesis.Validate(10.Seconds());
     }
         
-        
-    private static async Task<Sidecar> Sidecar(ILogger logger)
-    {
-        var sidecar = new Sidecar("to-dapr", logger);
-        await sidecar.Start(with => with
-            .ComponentsPath("components")
-            .AppPort(6000));
-
-        return sidecar;
-    }
-
-    private async Task<IAsyncDisposable> Host(IHandler<int> handler)
+    private async Task<IAsyncDisposable> Host(IHandler<int> handler, int port)
     {
         var app = Startup.App(builder =>
         {
-            builder.Services.AddSingleton(handler);
-            builder.Logging.AddXunit(_output);
+            builder.Services
+                .AddSingleton(handler)
+                .AddDaprSidekick(configure => configure.Sidecar = new DaprSidecarOptions
+                {
+                    ComponentsDirectory = "components",
+                    AppId = "to-dapr"
+                });;
+            builder.Logging.AddXUnit(_output);
+            
         });
-        
-        app.Urls.Add("http://localhost:6000");
+
+        app.Urls.Add($"http://localhost:{port}");
         await app.StartAsync();
         
         return app;
     }
 
-    private async Task Publish(UserLoggedIn message, ILogger logger)
+    private async Task Publish(UserLoggedIn message, ITestOutputHelper logger)
     {
         var producer = Configure.With(new EmptyActivator())
             .Transport(t => t.UseRabbitMqAsOneWayClient(_container.ConnectionString))
             .Serialization(s => s.UseCloudEvents())
-            .Logging(l => l.MicrosoftExtensionsLogging(logger))
+            .Logging(l => l.MicrosoftExtensionsLogging(logger.ToLoggerFactory()))
             .Start();
 
-        RouteToDapr();
+        RouteToDapr(_container.ConnectionString);
 
         await producer
             .Publish(message);
     }
 
-    private static void RouteToDapr() =>
-        new ConnectionFactory()
+    private static void RouteToDapr(string connectionString) =>
+        new ConnectionFactory
+            {
+                Endpoint = new AmqpTcpEndpoint(new Uri(connectionString))
+            }
             .CreateConnection()
             .CreateModel()
             .QueueBind("to-dapr-user/loggedIn", "RebusTopics", "#");

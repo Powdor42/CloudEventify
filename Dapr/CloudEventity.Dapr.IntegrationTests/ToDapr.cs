@@ -4,9 +4,9 @@ using DaprApp;
 using DaprApp.Controllers;
 using FluentAssertions.Extensions;
 using Hypothesist;
+using Man.Dapr.Sidekick;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Wrapr;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -28,10 +28,9 @@ public class ToDapr
             .For<int>()
             .Any(x => x == message.UserId);
 
-        using var logger = _output.BuildLogger();
         await using var host = await Host(hypothesis.ToHandler());
-        await using var sidecar = await Sidecar(logger);
-            
+        await Task.Delay(1.Seconds()); // sidecar takes a while for being available
+
         // Act
         await Publish(message);
 
@@ -45,24 +44,19 @@ public class ToDapr
         await client.PublishEvent("my-pubsub", "user/loggedIn", message);
     }
 
-
-    private static async Task<Sidecar> Sidecar(ILogger logger)
-    {
-        var sidecar = new Sidecar("to-dapr", logger);
-        await sidecar.Start(with => with
-            .ComponentsPath("components")
-            .AppPort(6000)
-            .DaprGrpcPort(3001));
-
-        return sidecar;
-    }
-
     private async Task<IAsyncDisposable> Host(IHandler<int> handler)
     {
         var app = Startup.App(builder =>
         {
-            builder.Services.AddSingleton(handler);
-            builder.Logging.AddXunit(_output);
+            builder.Services
+                .AddSingleton(handler)
+                .AddDaprSidekick(configure => configure.Sidecar = new DaprSidecarOptions
+                {
+                    ComponentsDirectory = "components",
+                    AppPort = 6000,
+                    DaprGrpcPort = 3001
+                });
+            builder.Logging.AddXUnit();
         });
         
         app.Urls.Add("http://localhost:6000");

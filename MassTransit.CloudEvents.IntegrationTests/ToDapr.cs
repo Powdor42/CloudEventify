@@ -5,10 +5,12 @@ using DaprApp;
 using FluentAssertions.Extensions;
 using Hypothesist;
 using DaprApp.Controllers;
+using Man.Dapr.Sidekick;
+using Man.Dapr.Sidekick.Extensions.Logging;
+using Man.Dapr.Sidekick.Threading;
 using MassTransit.Context;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Wrapr;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -35,26 +37,29 @@ public class ToDapr : IClassFixture<RabbitMqContainer>
             .For<int>()
             .Any(x => x == message.UserId);
 
-        using var logger = _output.BuildLogger();
         await using var host = await Host(hypothesis.ToHandler());
-        await using var sidecar = await Sidecar(logger);
+        await Sidecar(_output);
             
         // Act
-        await Publish(message, logger);
+        await Publish(message, _output);
 
         // Assert
         await hypothesis.Validate(10.Seconds());
     }
         
         
-    private static async Task<Sidecar> Sidecar(ILogger logger)
+    private static async Task Sidecar(ITestOutputHelper logger)
     {
-        var sidecar = new Sidecar("to-dapr", logger);
-        await sidecar.Start(with => with
-            .ComponentsPath("components")
-            .AppPort(6000));
-
-        return sidecar;
+        var sidekick = new DaprSidekickBuilder().WithLoggerFactory(new DaprLoggerFactory(logger.ToLoggerFactory())).Build();
+        sidekick.Sidecar.Start(() => new DaprOptions
+        {
+            Sidecar = new DaprSidecarOptions
+            {
+                ComponentsDirectory = "components",
+                DaprGrpcPort = 3001
+            }
+        }, DaprCancellationToken.None);
+        await Task.Delay(1.Seconds());
     }
 
     private async Task<IAsyncDisposable> Host(IHandler<int> handler)
@@ -62,7 +67,7 @@ public class ToDapr : IClassFixture<RabbitMqContainer>
         var app = Startup.App(builder =>
         {
             builder.Services.AddSingleton(handler);
-            builder.Logging.AddXunit(_output);
+            builder.Logging.AddXUnit(_output);
         });
         
         app.Urls.Add("http://localhost:6000");
@@ -71,9 +76,9 @@ public class ToDapr : IClassFixture<RabbitMqContainer>
         return app;
     }
 
-    private async Task Publish(UserLoggedIn message, ILogger logger)
+    private async Task Publish(UserLoggedIn message, ITestOutputHelper logger)
     {
-        LogContext.ConfigureCurrentLogContext(logger);
+        LogContext.ConfigureCurrentLogContext(logger.ToLoggerFactory());
             
         var bus = Bus.Factory
             .CreateUsingRabbitMq(cfg =>

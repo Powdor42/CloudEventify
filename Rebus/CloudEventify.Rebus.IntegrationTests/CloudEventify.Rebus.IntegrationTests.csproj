@@ -15,9 +15,11 @@
         <PackageReference Include="FluentAssertions" Version="6.1.0" />
         <PackageReference Include="Flurl.Http" Version="3.2.2" />
         <PackageReference Include="Hypothesist.Rebus" Version="2.0.30" />
+        <PackageReference Include="Man.Dapr.Sidekick.AspNetCore" Version="1.2.1" />
+        <PackageReference Include="Man.Dapr.Sidekick.Extensions.Logging" Version="1.2.1" />
+        <PackageReference Include="MartinCostello.Logging.XUnit" Version="0.2.0" />
         <PackageReference Include="Microsoft.NET.Test.Sdk" Version="16.11.0" />
         <PackageReference Include="Dapr.Client" Version="1.6.0" />
-        <PackageReference Include="Divergic.Logging.Xunit" Version="3.6.0" />
         <PackageReference Include="Rebus.Microsoft.Extensions.Logging" Version="2.0.0" />
         <PackageReference Include="Rebus.RabbitMq" Version="7.3.4" />
         <PackageReference Include="Wrapr" Version="1.0.16" />
